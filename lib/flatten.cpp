@@ -2815,7 +2815,7 @@ namespace MiniZinc {
               break;
             default: break;
             }
-          } else if (vd && vd->ti()->ranges().size() > 0) {
+          } /*else if (vd && vd->ti()->ranges().size() > 0) {
             // create fresh variables and array literal
             std::vector<std::pair<int,int> > dims;
             IntVal asize = 1;
@@ -2855,7 +2855,7 @@ namespace MiniZinc {
             EE ee;
             ee.r = vd;
             env.map_insert(vd->e(), ee);
-          }
+          }*/
           if (rete==NULL) {
             if (!vd->toplevel()) {
               // create new VarDecl in toplevel, if decl doesnt exist yet
@@ -2939,7 +2939,8 @@ namespace MiniZinc {
             alr->flat(true);
             ka = alr;
           }
-          ret.b = conj(env,b,Ctx(),elems_ee);
+          BoolLit *tr = new BoolLit(e->loc(), true);
+          ret.b = KeepAlive(tr);
           ret.r = bind(env,Ctx(),r,ka());
         }
       }
@@ -2952,8 +2953,16 @@ namespace MiniZinc {
         Ctx nctx = ctx;
         nctx.b = +nctx.b;
         nctx.neg = false;
-        EE eev = flat_exp(env,nctx,aa->v(),NULL,NULL);
+        EE eev = flat_exp(env,nctx,aa->v(),NULL,NULL); // array to access
         std::vector<EE> ees;
+        Id* id1 = eev.r()->cast<Id>();
+        if (id1->decl()->e() == NULL) {
+            // array has no initialization
+            BoolLit* tr = new BoolLit(e->loc(), true);
+            ret.b = KeepAlive(tr);
+            ret.r = aa;
+            break;
+        }
 
       start_flatten_arrayaccess:
         for (unsigned int i=0; i<aa->idx().size(); i++) {
@@ -2970,7 +2979,7 @@ namespace MiniZinc {
                 throw InternalError("undefined identifier");
               }
               if (id->decl()->e()==NULL) {
-                throw InternalError("array without initialiser not supported");
+                throw InternalError("array without initialiser not supported 1");
               }
               al = follow_id(id)->cast<ArrayLit>();
             }
@@ -3084,7 +3093,7 @@ namespace MiniZinc {
               throw InternalError("undefined identifier");
             }
             if (id->decl()->e()==NULL) {
-              throw InternalError("array without initialiser not supported");
+              throw InternalError("array without initialiser not supported 2");
             }
             al = follow_id(id)->cast<ArrayLit>();
           }
@@ -3148,7 +3157,7 @@ namespace MiniZinc {
               throw InternalError("undefined identifier");
             }
             if (id->decl()->e()==NULL) {
-              throw InternalError("array without initialiser not supported");
+              throw InternalError("array without initialiser not supported 3");
             }
             al = follow_id(id)->cast<ArrayLit>();
           }
@@ -4094,7 +4103,7 @@ namespace MiniZinc {
                 throw InternalError("undefined identifier");
               }
               if (id->decl()->e()==NULL) {
-                throw InternalError("array without initialiser not supported");
+                throw InternalError("array without initialiser not supported 4");
               }
               al = follow_id(id)->cast<ArrayLit>();
             }
@@ -4109,7 +4118,7 @@ namespace MiniZinc {
                 throw InternalError("undefined identifier");
               }
               if (id->decl()->e()==NULL) {
-                throw InternalError("array without initialiser not supported");
+                throw InternalError("array without initialiser not supported 5");
               }
               al = follow_id(id)->cast<ArrayLit>();
             }
@@ -5501,6 +5510,7 @@ namespace MiniZinc {
       onlyRangeDomains = eval_bool(e.envi(), check_only_range);
     }
     
+    /*
     class ExpandArrayDecls : public ItemVisitor {
     public:
       EnvI& env;
@@ -5512,6 +5522,7 @@ namespace MiniZinc {
       }
     } _ead(env);
     iterItems<ExpandArrayDecls>(_ead,e.model());;
+    */
     
     bool hadSolveItem = false;
     // Flatten main model
