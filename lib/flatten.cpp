@@ -6226,6 +6226,7 @@ namespace MiniZinc {
             }
           }
         } else if (vd->type().dim() > 0) {
+          if (vd->e() == NULL) continue; // no initialization
           if (!vd->e()->isa<ArrayLit>()) {
             vd->e(follow_id(vd->e()));
           }
