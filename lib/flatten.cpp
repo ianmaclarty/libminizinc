@@ -2939,8 +2939,7 @@ namespace MiniZinc {
             alr->flat(true);
             ka = alr;
           }
-          BoolLit *tr = new BoolLit(e->loc(), true);
-          ret.b = KeepAlive(tr);
+          ret.b = conj(env,b,Ctx(),elems_ee);
           ret.r = bind(env,Ctx(),r,ka());
         }
       }
