@@ -845,11 +845,13 @@ namespace MiniZinc {
         case Expression::E_UNOP:
           return e; /// TODO: should not happen once operators are evaluated
         case Expression::E_ARRAYACCESS:
+          return e;
         case Expression::E_COMP:
         case Expression::E_ITE:
         case Expression::E_LET:
         case Expression::E_TI:
-          throw InternalError("unevaluated expression");
+          assert(false);
+          //throw InternalError("unevaluated expression");
         case Expression::E_ARRAYLIT:
           {
             GCLock lock;
@@ -2815,6 +2817,7 @@ namespace MiniZinc {
               break;
             default: break;
             }
+          // XXX create array initialization variables
           } /*else if (vd && vd->ti()->ranges().size() > 0) {
             // create fresh variables and array literal
             std::vector<std::pair<int,int> > dims;
@@ -2957,17 +2960,30 @@ namespace MiniZinc {
         Id* id1 = eev.r()->cast<Id>();
         if (id1->decl()->e() == NULL) {
             // array has no initialization
-            BoolLit* tr = new BoolLit(e->loc(), true);
-            ret.b = KeepAlive(tr);
-            ret.r = aa;
+            GCLock lock;
+            int num_indexes = aa->idx().size();
+            std::vector<Expression*> newidx(num_indexes);
+            for (int i = 0; i < num_indexes; i++) {
+                newidx[i] = new IntLit(aa->idx()[i]->loc(), eval_int(env, aa->idx()[i]));
+            }
+            //KeepAlive ka = new ArrayAccess(aa->loc(), aa->v(), aa->idx());
+            KeepAlive ka = new ArrayAccess(aa->loc(), eev.r(), newidx);
+            ka()->type(aa->type());
+            //ArrayAccess *new_aa = new ArrayAccess(aa->loc(), aa->v(), aa->idx());
+            //new_aa->type(aa->type());
+            //KeepAlive ka = new_aa;
+            //ka = aa_ka; // this causes no indroduced vars
+            ret.b = KeepAlive(constants().lit_true);
+            ret.r = ka;
             break;
         }
 
       start_flatten_arrayaccess:
         for (unsigned int i=0; i<aa->idx().size(); i++) {
           Expression* tmp = follow_id_to_decl(aa->idx()[i]);
-          if (VarDecl* vd = tmp->dyn_cast<VarDecl>())
+          if (VarDecl* vd = tmp->dyn_cast<VarDecl>()) {
             tmp = vd->id();
+          }
           if (tmp->type().ispar()) {
             ArrayLit* al;
             if (eev.r()->isa<ArrayLit>()) {
@@ -2978,9 +2994,11 @@ namespace MiniZinc {
                 throw InternalError("undefined identifier");
               }
               if (id->decl()->e()==NULL) {
-                throw InternalError("array without initialiser not supported 1");
+                //throw InternalError("array without initialiser not supported 1");
+                al = NULL;
+              } else {
+                al = follow_id(id)->cast<ArrayLit>();
               }
-              al = follow_id(id)->cast<ArrayLit>();
             }
             
             std::vector<KeepAlive> elems;
@@ -2989,14 +3007,17 @@ namespace MiniZinc {
             std::vector<Expression*> newaccess;
             std::vector<int> nonpar;
             std::vector<int> stack;
-            for (unsigned int j=0; j<aa->idx().size(); j++) {
-              Expression* tmp = follow_id_to_decl(aa->idx()[j]);
-              if (VarDecl* vd = tmp->dyn_cast<VarDecl>())
-                tmp = vd->id();
-              if (tmp->type().ispar()) {
+
+            for (unsigned int j=0; j<aa->idx().size(); j++) { // forall indexes
+              Expression* tmp = follow_id_to_decl(aa->idx()[j]); // decl of index expression (not sure what that means)
+              if (VarDecl* vd = tmp->dyn_cast<VarDecl>()) // is the index a variable?
+                tmp = vd->id();  // if 
+              if (tmp->type().ispar()) { // is it a par?
                 GCLock lock;
-                idx[j] = eval_int(env, tmp).toInt();
+                idx[j] = eval_int(env, tmp).toInt(); // evaluate the index
               } else {
+                // the index is a variable
+                // not sure what the following does. probably something to do with element constraints?
                 idx[j] = al->min(j);
                 stack.push_back(nonpar.size());
                 nonpar.push_back(j);
@@ -3005,13 +3026,22 @@ namespace MiniZinc {
               }
             }
             if (stack.empty()) {
+              // only get here if no var indexes
               bool success;
               KeepAlive ka;
               {
                 GCLock lock;
-                ka = eval_arrayaccess(env, al, idx, success);
-                if (!success && ctx.b==C_ROOT && b==constants().var_true) {
-                  throw FlatteningError(env,e->loc(),"array access out of bounds");
+                if (al == NULL) { // no array declaration, so leave the expression as an array access
+                    std::vector<Expression*> newidx(idx.size());
+                    for (int i = 0; i < idx.size(); i++) {
+                        newidx[i] = new IntLit(aa->idx()[i]->loc(), idx[i]);
+                    }
+                    ka = new ArrayAccess(aa->loc(), eev.r(), newidx);
+                } else {
+                    ka = eval_arrayaccess(env, al, idx, success);
+                    if (!success && ctx.b==C_ROOT && b==constants().var_true) {
+                      throw FlatteningError(env,e->loc(),"array access out of bounds");
+                    }
                 }
               }
               ees.push_back(EE(NULL,constants().boollit(success)));
@@ -5509,7 +5539,6 @@ namespace MiniZinc {
       onlyRangeDomains = eval_bool(e.envi(), check_only_range);
     }
     
-    /*
     class ExpandArrayDecls : public ItemVisitor {
     public:
       EnvI& env;
@@ -5521,7 +5550,6 @@ namespace MiniZinc {
       }
     } _ead(env);
     iterItems<ExpandArrayDecls>(_ead,e.model());;
-    */
     
     bool hadSolveItem = false;
     // Flatten main model
