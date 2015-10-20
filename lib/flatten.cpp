@@ -4662,6 +4662,7 @@ namespace MiniZinc {
           if (v->e()) {
             (void) flat_exp(env,nctx,v->e(),vd,constants().var_true);
             if (v->e()->type().bt()==Type::BT_INT && v->e()->type().dim()==0) {
+
               IntSetVal* ibv = NULL;
               if (v->e()->type().is_set()) {
                 ibv = compute_intset_bounds(env,v->e());
@@ -5731,9 +5732,11 @@ namespace MiniZinc {
             keptVariable = false;
           }
         }
-        if (vdi && keptVariable && vdi->e()->type().dim() > 0 && vdi->e()->type().isvar()) {
-          vdi->e()->ti()->domain(NULL);
-        }
+        // this removes the domain of array variables. disabled, because we no longer
+        // create separate variables array elements
+        //if (vdi && keptVariable && vdi->e()->type().dim() > 0 && vdi->e()->type().isvar()) {
+        //  vdi->e()->ti()->domain(NULL);
+        //}
         if (vdi && keptVariable &&
             vdi->e()->type().isint() && vdi->e()->type().isvar() &&
             vdi->e()->ti()->domain() != NULL) {
