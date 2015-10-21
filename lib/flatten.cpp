@@ -2253,7 +2253,25 @@ namespace MiniZinc {
       args.push_back(il);
     }
   }
-  
+
+  static int compute_array_size(EnvI& env, VarDecl *vd) {
+    IntVal asize = 1;
+    for (unsigned int i=0; i<vd->ti()->ranges().size(); i++) {
+      TypeInst* ti = vd->ti()->ranges()[i];
+      if (ti->domain()==NULL)
+        throw FlatteningError(env,ti->loc(),"array dimensions unknown");
+      IntSetVal* isv = eval_intset(env,ti->domain());
+      if (isv->size() == 0) {
+        asize = 0;
+      } else {
+        if (isv->size() != 1)
+          throw FlatteningError(env,ti->loc(),"invalid array index set");
+        asize *= (isv->max(0)-isv->min(0)+1);
+      }
+    }
+    return asize.toInt();
+  }
+
   template<class Lit>
   void flatten_linexp_call(EnvI& env, Ctx ctx, Ctx nctx, ASTString& cid, Call* c,
                            EE& ret, VarDecl* b, VarDecl* r,
@@ -2261,7 +2279,29 @@ namespace MiniZinc {
     typedef typename LinearTraits<Lit>::Val Val;
     Expression* al_arg = (cid==constants().ids.sum ? args_ee[0].r() : args_ee[1].r());
     EE flat_al = flat_exp(env,nctx,al_arg,NULL,NULL);
-    ArrayLit* al = follow_id(flat_al.r())->template cast<ArrayLit>();
+    Expression* al_exp = follow_id(flat_al.r());
+    ArrayLit *al;
+    if (al_exp == NULL) {
+        // array was not initialized
+        // create an ArrayLit containing ArrayAccess elements
+        // for use with the rest of this function.
+        Expression *decl = follow_id_to_decl(flat_al.r());
+        VarDecl *vd = decl->template cast<VarDecl>();
+        Expression *flat_al_e = flat_al.r();
+        Id *flat_id = flat_al.r()->template cast<Id>();
+        //Printer(std::cerr).print(flat_al_e);
+        //fprintf(stderr, "eid = %d, E_ID = %d", flat_al_e->eid(), (int)Expression::E_ID);
+        int sz = compute_array_size(env, vd);
+        std::vector<Expression*> vals(sz);
+        for (int i = 0; i < sz; i++) {
+            std::vector<Expression*> idx(1);
+            idx[0] = new IntLit(Location().introduce(), i+1); // XXX compute proper indices
+            vals[i] = new ArrayAccess(Location().introduce(), flat_id, idx);
+        }
+        al = new ArrayLit(flat_al_e->loc(), vals);
+    } else {
+        al = al_exp->template cast<ArrayLit>();
+    }
     KeepAlive al_ka = al;
     if (al->dims()>1) {
       Type alt = al->type();
